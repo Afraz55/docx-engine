@@ -1,5 +1,5 @@
 // ===============================
-// DOCX ENGINE - FINAL VERSION
+// DOCX ENGINE - FINAL v4+ VERSION
 // ===============================
 
 const express = require("express");
@@ -10,8 +10,6 @@ const ImageModule = require("docxtemplater-image-module-free");
 const { Buffer } = require("buffer");
 
 const app = express();
-
-// Increase limit for screenshots + large payloads
 app.use(bodyParser.json({ limit: "200mb" }));
 
 // ===============================
@@ -20,19 +18,13 @@ app.use(bodyParser.json({ limit: "200mb" }));
 const imageOpts = {
   centered: false,
 
-  // Expecting: { data: "<base64>", width: <number> }
   getImage(tagValue) {
-    try {
-      return Buffer.from(tagValue.data, "base64");
-    } catch (err) {
-      console.error("❌ Image conversion failed:", err);
-      return null;
-    }
+    return Buffer.from(tagValue.data, "base64");
   },
 
   getSize(img, tagValue) {
     const width = tagValue.width || 550;
-    return [width, null]; // auto height
+    return [width, null];
   }
 };
 
@@ -41,61 +33,49 @@ const imageOpts = {
 // ===============================
 app.post("/fill", (req, res) => {
   try {
-    console.log("👉 Request received.");
+    console.log("👉 Request received");
 
     const { templateBase64, data, apiKey } = req.body;
 
-    // Optional API key protection
     if (process.env.API_KEY && apiKey !== process.env.API_KEY) {
       return res.status(403).json({ error: "Invalid API key" });
     }
-
     if (!templateBase64 || !data) {
-      return res
-        .status(400)
-        .json({ error: "Missing templateBase64 or data fields" });
+      return res.status(400).json({ error: "Missing templateBase64 or data" });
     }
 
-    // -------------------------------
-    // 1. Convert base64 into zip
-    // -------------------------------
+    // 1. Load ZIP
     const templateBuffer = Buffer.from(templateBase64, "base64");
     const zip = new PizZip(templateBuffer);
 
-    // -------------------------------
-    // 2. Initialize Docxtemplater
-    // -------------------------------
+    // 2. Initialize Docxtemplater (v4 syntax)
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
-      delimiters: { start: "%%", end: "%%" }
-      doc.attachModule(new ImageModule(imageOpts)); // 💡 Safe delimiters
+      delimiters: { start: "%%", end: "%%" },
+      modules: [
+        new ImageModule(imageOpts)  // ✔ ATTACH MODULES HERE ONLY
+      ]
     });
-    // -------------------------------
-    // 3. Render with NEW API
-    // -------------------------------
+
+    // 3. Render with new API
     doc.render(data);
 
-    // -------------------------------
-    // 4. Generate Output DOCX
-    // -------------------------------
+    // 4. Output file
     const buffer = doc.getZip().generate({ type: "nodebuffer" });
     const docxBase64 = buffer.toString("base64");
 
     console.log("✅ Document generated successfully.");
-
     return res.json({ docxBase64 });
 
   } catch (error) {
     console.error("❌ Template Processing Failed!");
 
     let detail = error.message;
-
-    if (error.properties && Array.isArray(error.properties.errors)) {
+    if (error.properties?.errors) {
       detail = error.properties.errors
         .map(e => e.properties.explanation)
         .join("\n");
-      console.error("🔍 DocxTemplater Errors Found:\n", detail);
     }
 
     return res.status(500).json({
@@ -106,15 +86,11 @@ app.post("/fill", (req, res) => {
 });
 
 // ===============================
-// HEALTH CHECK
-// ===============================
 app.get("/", (req, res) => {
-  res.send("DOCX Engine is running ✔ (Final Version)");
+  res.send("DOCX Engine is running ✔ (v4-safe)");
 });
 
-// ===============================
-// START SERVER
-// ===============================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 DOCX engine running on port", PORT));
+
 
