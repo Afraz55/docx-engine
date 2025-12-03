@@ -68,12 +68,9 @@ app.post("/fill", (req, res) => {
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
-      delimiters: { start: "%%", end: "%%" } // 💡 Safe delimiters
+      delimiters: { start: "%%", end: "%%" }
+      doc.attachModule(new ImageModule(imageOpts)); // 💡 Safe delimiters
     });
-
-    // Attach image module AFTER initialization
-    doc.attachModule(new ImageModule(imageOpts));
-
     // -------------------------------
     // 3. Render with NEW API
     // -------------------------------
@@ -120,3 +117,4 @@ app.get("/", (req, res) => {
 // ===============================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 DOCX engine running on port", PORT));
+
