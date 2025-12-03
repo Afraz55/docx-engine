@@ -19,6 +19,12 @@ function getSize(img, tagValue) {
   const width = tagValue.width || 550; 
   return [width, null]; 
 }
+const doc = new Docxtemplater(zip, {
+  modules: [new ImageModule(imageOpts)],
+  paragraphLoop: true,
+  linebreaks: true,
+  delimiters: { start: '%%', end: '%%' } // <--- Add this
+});
 
 const imageOpts = {
   centered: false,
@@ -95,3 +101,4 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("DOCX engine running on port", PORT));
+
