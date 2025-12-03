@@ -1,4 +1,4 @@
-// app.js - DEBUG VERSION
+// app.js - FINAL DEBUG VERSION (Catches Initialization Errors)
 const express = require("express");
 const bodyParser = require("body-parser");
 const PizZip = require("pizzip");
@@ -7,9 +7,10 @@ const ImageModule = require("docxtemplater-image-module-free");
 const { Buffer } = require("buffer");
 
 const app = express();
+// Increase limit for screenshots
 app.use(bodyParser.json({ limit: "200mb" })); 
 
-// 1. Image processing settings
+// Image processing helper functions
 function getImage(tagValue) {
   return Buffer.from(tagValue.data, "base64");
 }
@@ -26,8 +27,9 @@ const imageOpts = {
 };
 
 app.post("/fill", (req, res) => {
+  // 1. GLOBAL TRY BLOCK - Catches errors anywhere in the process
   try {
-    console.log("👉 Request received. Data keys:", Object.keys(req.body.data || {}));
+    console.log("👉 Request received.");
 
     const { templateBase64, data, apiKey } = req.body;
 
@@ -39,55 +41,56 @@ app.post("/fill", (req, res) => {
       return res.status(400).json({ error: "Missing templateBase64 or data" });
     }
 
+    // 2. Load Zip
     const templateBuffer = Buffer.from(templateBase64, "base64");
     const zip = new PizZip(templateBuffer);
 
-    // 2. Initialize Docxtemplater with better error handling settings
+    // 3. Initialize Docxtemplater (Parsing happens here too!)
     const doc = new Docxtemplater(zip, {
       modules: [new ImageModule(imageOpts)],
       paragraphLoop: true,
       linebreaks: true,
     });
 
+    // 4. Set Data
     doc.setData(data);
 
-    try {
-      doc.render();
-    } catch (error) {
-      // 3. THIS IS THE CRITICAL FIX FOR "MULTI ERROR"
-      console.error("❌ Render Error Caught!");
-      
-      let errorDetails = error.message;
-      
-      // Extract the real reason from the properties
-      if (error.properties && error.properties.errors instanceof Array) {
-        const errorMessages = error.properties.errors.map(function (err) {
-          return err.properties.explanation;
-        }).join("\n");
-        console.error("🔍 DETAILED ERRORS:", errorMessages);
-        errorDetails = errorMessages;
-      }
-      
-      return res.status(500).json({ 
-        error: "Template Parsing Failed", 
-        details: errorDetails 
-      });
-    }
+    // 5. Render
+    doc.render();
 
+    // 6. Generate Output
     const buffer = doc.getZip().generate({ type: "nodebuffer" });
     const docxBase64 = buffer.toString("base64");
 
     console.log("✅ Document generated successfully.");
     return res.json({ docxBase64 });
 
-  } catch (e) {
-    console.error("💥 Fatal server error", e);
-    return res.status(500).json({ error: "Server crash", details: e.message });
+  } catch (error) {
+    // 7. INTELLIGENT ERROR HANDLING
+    console.error("❌ Process Failed!");
+
+    let errorDetails = error.message;
+
+    // Check if this is a Docxtemplater Multi-Error
+    if (error.properties && error.properties.errors instanceof Array) {
+      const errorMessages = error.properties.errors.map(function (err) {
+        return err.properties.explanation;
+      }).join("\n");
+      
+      console.error("🔍 DETAILED ERRORS FOUND:", errorMessages);
+      errorDetails = "TEMPLATE ERROR: " + errorMessages;
+    }
+
+    // Return the detailed error to Apps Script so you can read it in the logs
+    return res.status(500).json({ 
+      error: "Detailed Crash Report", 
+      details: errorDetails 
+    });
   }
 });
 
 app.get("/", (req, res) => {
-  res.send("DOCX Engine is running (Debug Mode) ✔");
+  res.send("DOCX Engine is running (v3 - Catch All Mode) ✔");
 });
 
 const PORT = process.env.PORT || 3000;
