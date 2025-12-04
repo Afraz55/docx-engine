@@ -1,5 +1,5 @@
 // ======================================================================
-// DOCX ENGINE – FULLY FIXED VERSION WITH LOOP SUPPORT + IMAGE SUPPORT
+// DOCX ENGINE – PRODUCTION VERSION (Fixed "Undefined" + Loops + Images)
 // ======================================================================
 
 const express = require("express");
@@ -7,22 +7,23 @@ const bodyParser = require("body-parser");
 const PizZip = require("pizzip");
 const Docxtemplater = require("docxtemplater");
 const ImageModule = require("docxtemplater-image-module-free");
-const ExpressionModule = require("docxtemplater-expression-module");
 const { Buffer } = require("buffer");
 
 const app = express();
 
-// Increase JSON size to allow screenshots
+// Increase JSON size to allow huge screenshot payloads
 app.use(bodyParser.json({ limit: "200mb" }));
 
 // -------------------------------
 // IMAGE HANDLERS
 // -------------------------------
 function getImage(tagValue) {
+    // Converts base64 string to buffer
     return Buffer.from(tagValue.data, "base64");
 }
 
 function getSize(img, tagValue) {
+    // Uses width from JSON or defaults to 550px
     return [tagValue.width || 550, null];
 }
 
@@ -55,19 +56,28 @@ app.post("/fill", (req, res) => {
         const templateBuf = Buffer.from(templateBase64, "base64");
         const zip = new PizZip(templateBuf);
 
-        // 2️⃣ Initialize Docxtemplater WITH loop support
+        // 2️⃣ Initialize Docxtemplater
         const doc = new Docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
-            delimiters: { start: "%%", end: "%%" },
+            // ⭐ CRITICAL: Match your Word delimiters (%%Clientname%%)
+            delimiters: { start: "%%", end: "%%" }, 
+            
+            // ⭐ CRITICAL: Replaces "undefined" with empty space
+            nullGetter: function(part) {
+                if (!part.module) return "";
+                if (part.module === "rawxml") return "";
+                return "";
+            },
+
             modules: [
-                new ExpressionModule(),      // ⭐ REQUIRED FOR LOOPS
-                new ImageModule(imageOpts)   // ⭐ REQUIRED FOR IMAGES
+                new ImageModule(imageOpts) // Handles images
             ]
         });
 
-        // 3️⃣ Set dynamic data
-        doc.render(data);
+        // 3️⃣ Set dynamic data & Render
+        doc.setData(data);
+        doc.render();
 
         // 4️⃣ Generate DOCX output
         const outputBuffer = doc.getZip().generate({
@@ -85,7 +95,7 @@ app.post("/fill", (req, res) => {
 
         let details = error.message;
 
-        // MultiError handler
+        // Intelligent MultiError handler (Unpacks the real issue)
         if (error.properties && Array.isArray(error.properties.errors)) {
             details = error.properties.errors
                 .map(e => e.properties.explanation)
@@ -95,16 +105,17 @@ app.post("/fill", (req, res) => {
 
         return res.status(500).json({
             error: "DOCX Engine Crash",
-            details
+            details: "TEMPLATE ERROR: " + details
         });
     }
 });
 
 // Health check
 app.get("/", (req, res) => {
-    res.send("DOCX Engine running with loop support ✔");
+    res.send("DOCX Engine running (v5 - Final Clean) ✔");
 });
 
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 DOCX Engine running on port", PORT));
+
